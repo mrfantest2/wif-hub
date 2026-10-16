@@ -10,7 +10,7 @@ if ! grep -Fq 'iifname "tailscale0" tcp dport { 22, 3389, 21118 } accept' "$RULE
   echo "Expected AgentBox rule not found. No changes made." >&2
   exit 1
 fi
-echo "Allow WiF HUB TCP 42424 only via tailscale0."
+echo "Allow WiFi HUB TCP 42424 only via tailscale0."
 sudo nft list chain inet agentbox input > /dev/null
 if ! sudo nft list chain inet agentbox input | grep -Eq 'tailscale0.*42424'; then
   sudo nft add rule inet agentbox input iifname "tailscale0" tcp dport 42424 accept

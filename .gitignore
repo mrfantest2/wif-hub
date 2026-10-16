@@ -14,3 +14,7 @@ identity.json
 __pycache__/
 .venv/
 *.log
+
+dist/
+change_*_v014.py
+finalize_v014.py

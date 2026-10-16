@@ -45,12 +45,12 @@ public final class MainActivity extends Activity {
     private final Handler ui = new Handler(Looper.getMainLooper());
     private JSONArray hosts = new JSONArray();
     private int selected = -1;
-    private LinearLayout base, hostCards, discoveredCards, deviceCards, serviceCards;
+    private LinearLayout base, hostCards, discoveredCards, deviceCards, serviceCards, scanCards, enrollCard;
     private ScrollView pageScroll;
     private View[] pageSections;
     private Button[] tabButtons;
     private int activeTab = 0;
-    private TextView banner, currentHost, helperInfo;
+    private TextView banner, currentHost, helperInfo, scanInfo;
     private EditText hostIp, hostPort, hostCode, hostName, targetIp, pairPort, pairCode, connectPort;
     private boolean alive = true;
 
@@ -69,6 +69,7 @@ public final class MainActivity extends Activity {
         layout();
         drawHosts();
         if (selected >= 0) refresh();
+        scanNow();
     }
 
     int dp(float n) { return (int) (n * getResources().getDisplayMetrics().density + .5f); }
@@ -139,9 +140,9 @@ public final class MainActivity extends Activity {
         });
         setContentView(scroll);
 
-        TextView logo = text("WiF  HUB", 31, WHITE, true); put(base, logo, 5);
+        TextView logo = text("WiFi HUB", 31, WHITE, true); put(base, logo, 5);
         put(base, text("Private ADB command center • Tailscale", 13, MUTED, false), 14);
-        banner = text("Select a gateway or enroll a new computer.", 13, ACCENT, false);
+        banner = text("Discovering devices and gateways on Tailscale…", 13, ACCENT, false);
         banner.setPadding(dp(12), dp(12), dp(12), dp(12));
         banner.setBackground(shape(0xff13333b, 10, 0xff23595a)); put(base, banner, 15);
 
@@ -149,12 +150,12 @@ public final class MainActivity extends Activity {
         tabs.setOrientation(LinearLayout.HORIZONTAL);
         tabs.setPadding(dp(4), dp(4), dp(4), dp(4));
         tabs.setBackground(shape(PANEL, 14, BORDER));
-        String[] tabNames = {"Hosts", "Devices", "Pair", "Helper"};
+        String[] tabNames = {"Scan", "Hosts", "Devices", "Pair", "Helper"};
         tabButtons = new Button[tabNames.length];
         for (int i = 0; i < tabNames.length; i++) {
             final int tab = i;
             Button b = button(tabNames[i], false, v -> showTab(tab));
-            b.setTextSize(12);
+            b.setTextSize(11);
             b.setMinimumHeight(dp(43));
             b.setMinHeight(dp(43));
             LinearLayout.LayoutParams item = new LinearLayout.LayoutParams(0, dp(44), 1);
@@ -164,16 +165,24 @@ public final class MainActivity extends Activity {
         }
         put(base, tabs, 15);
 
-        LinearLayout gateway = card(base, "01   Gateways", "Manage multiple Windows and Linux computers.");
+        LinearLayout scanner = card(base, "01   Tailscale devices",
+                "Automatically finds reachable gateways and lists devices on their tailnet.");
+        scanInfo = text("Scanning nearby gateways and MagicDNS…", 13, MUTED, false);
+        put(scanner, scanInfo, 10);
+        action(scanner, "Scan Tailscale again", true, v -> scanNow());
+        scanCards = vertical(); put(scanner, scanCards, 4);
+
+        LinearLayout gateway = card(base, "02   Gateway controls", "Select an enrolled Windows or Linux host.");
         currentHost = text("No gateway selected", 13, MUTED, true); put(gateway, currentHost, 10);
         hostCards = vertical(); put(gateway, hostCards, 4);
         action(gateway, "Refresh selected gateway", true, v -> refresh());
-        action(gateway, "Discover tailnet gateways", false, v -> discover());
+        action(gateway, "Scan connected Tailscale machines", false, v -> {showTab(0); scanNow();});
         discoveredCards = vertical(); put(gateway, discoveredCards, 4);
         action(gateway, "Reconnect offline ADB devices", false, v -> postSelected("/v1/reconnect", new JSONObject(), true));
 
-        LinearLayout enroll = card(base, "02   Enroll a computer",
+        LinearLayout enroll = card(base, "Approve discovered computer",
                 "Obtain the six-digit approval code from the gateway's terminal.");
+        enrollCard = enroll;
         hostName = input(enroll, "Display name (optional)", "", 0);
         hostIp = input(enroll, "Computer Tailscale IP (100.x.x.x)", "", 0);
         hostPort = input(enroll, "Gateway port", "42424", 2);
@@ -210,7 +219,7 @@ public final class MainActivity extends Activity {
             String ip = localTailIp();
             if (ip == null) { show("Error: Tailscale IP is not available. Connect Tailscale."); return; }
             ClipboardManager cb = (ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);
-            cb.setPrimaryClip(ClipData.newPlainText("WiF HUB Tailscale IP", ip));
+            cb.setPrimaryClip(ClipData.newPlainText("WiFi HUB Tailscale IP", ip));
             show("Copied: " + ip);
         });
         put(helper, text("Secure pairing and USB authorization cannot be forced on an unprivileged Android device. A previously ADB-authorized host can request TCP/IP mode.", 12, MUTED, false), 0);
@@ -223,16 +232,16 @@ public final class MainActivity extends Activity {
                 } else startActivity(launch);
             } catch (Exception ex) { show("Error opening Tailscale: " + ex.getMessage()); }
         });
-        put(base, text("WiF HUB v0.1.3  •  Private gateways  •  No cloud hosting", 11, MUTED, false), 10);
-        pageSections = new View[]{gateway, enroll, dev, pair, helper};
+        put(base, text("WiFi HUB v0.1.4  •  Tailnet discovery  •  No cloud hosting", 11, MUTED, false), 10);
+        pageSections = new View[]{scanner, gateway, enroll, dev, pair, helper};
         showTab(0);
     }
 
     void showTab(int tab) {
-        if (pageSections == null || tabButtons == null || tab < 0 || tab > 3) return;
+        if (pageSections == null || tabButtons == null || tab < 0 || tab > 4) return;
         activeTab = tab;
         for (int i = 0; i < pageSections.length; i++) {
-            int owner = i == 0 || i == 1 ? 0 : i - 1;
+            int owner = i == 0 ? 0 : i <= 2 ? 1 : i - 1;
             pageSections[i].setVisibility(owner == tab ? View.VISIBLE : View.GONE);
         }
         for (int i = 0; i < tabButtons.length; i++) {
@@ -386,7 +395,7 @@ public final class MainActivity extends Activity {
                         if (ip.equals(hosts.optJSONObject(i).optString("ip")) && p == hosts.optJSONObject(i).optInt("port")) existing = i;
                     if (existing >= 0) { hosts.put(existing, newHost); selected = existing; }
                     else { hosts.put(newHost); selected = hosts.length() - 1; }
-                    persist(); hostCode.setText(""); drawHosts();
+                    persist(); hostCode.setText(""); drawHosts(); scanNow();
                     show("Gateway enrolled and selected: " + ip); refresh();
                 } catch (Exception e) { show("Error: " + e.getMessage()); }
             });
@@ -446,7 +455,7 @@ public final class MainActivity extends Activity {
                         if ("pair".equals(s.optString("kind"))) pairPort.setText(String.valueOf(sp));
                         else connectPort.setText(String.valueOf(sp));
                         show("Endpoint copied into pairing / connection form.");
-                        showTab(2);
+                        showTab(3);
                     });
                     put(serviceCards, c, 8);
                 }
@@ -454,43 +463,92 @@ public final class MainActivity extends Activity {
             show("Connected: " + response.optString("host") + " • " + (list == null ? 0 : list.length()) + " ADB entries.");
         });
     }
-    void discover() {
-        if (chosen() == null) { show("Error: Enroll a gateway to discover its tailnet peers."); return; }
-        show("Reading Tailscale peer inventory…");
-        requestSelected("/v1/peers", null, response -> {
-            JSONArray peers = response.optJSONArray("peers");
-            if (peers == null) { show("Error: " + response.optString("error", "No peer listing")); return; }
-            discoveredCards.removeAllViews();
-            put(discoveredCards, text("Tailnet peers • choose a phone or check for gateways", 12, MUTED, true), 7);
-            int shown = 0;
-            for (int i = 0; i < peers.length(); i++) {
-                JSONObject peer = peers.optJSONObject(i);
-                if (peer == null || !peer.optBoolean("online", true)) continue;
-                String ip = peer.optString("ip"), host = peer.optString("name"), os = peer.optString("os", "");
-                if (!validIp(ip)) continue;
-                shown++;
-                LinearLayout row = vertical(); row.setPadding(dp(9), dp(9), dp(9), dp(6));
-                row.setBackground(shape(0xff182e3e, 10, BORDER));
-                put(row, text(host + " • " + os, 13, WHITE, true), 4);
-                put(row, text(ip, 12, MUTED, false), 8);
-                action(row, "Use IP as Android target", false, v -> {
-                    targetIp.setText(ip);
-                    show("Target IP selected: " + host + ". Enter its active ADB pairing/connection port.");
-                });
-                TextView gatewayState = text("Checking for WiF HUB gateway…", 11, MUTED, false);
-                put(row, gatewayState, 6);
-                put(discoveredCards, row, 8);
-                request(ip, 42424, null, "/v1/info", null, check -> {
-                    if (!check.optBoolean("ok")) { gatewayState.setText("Gateway not responding"); return; }
-                    gatewayState.setText("WiF HUB gateway available");
-                    action(row, "Prepare gateway enrollment", false, v -> {
-                        hostIp.setText(ip); hostName.setText(host); hostPort.setText("42424");
-                        show("Found gateway " + host + ". Enter its computer approval code.");
+    void discover() { scanNow(); }
+
+    void scanNow() {
+        if (scanCards == null || scanInfo == null) return;
+        scanInfo.setText("Discovering gateways through Tailscale MagicDNS, LAN, and saved hosts…");
+        scanCards.removeAllViews();
+        show("Scanning for connected Tailscale devices…");
+        final JSONArray snapshot = new JSONArray();
+        for (int i = 0; i < hosts.length(); i++) snapshot.put(hosts.opt(i));
+        io.execute(() -> {
+            DiscoveryEngine.Result result = DiscoveryEngine.scan(this, snapshot);
+            ui.post(() -> {
+                if (!alive) return;
+                drawTailnetPeers(result);
+            });
+        });
+    }
+
+    int knownHostIndex(String ip) {
+        for (int i = 0; i < hosts.length(); i++) {
+            JSONObject h = hosts.optJSONObject(i);
+            if (h != null && ip.equals(h.optString("ip"))) return i;
+        }
+        return -1;
+    }
+
+    void prepareApproval(String ip, String name) {
+        hostName.setText(name);
+        hostIp.setText(ip);
+        hostPort.setText("42424");
+        hostCode.setText("");
+        showTab(1);
+        show("Found " + name + ". Enter its one-time host approval code.");
+        if (pageScroll != null && enrollCard != null)
+            pageScroll.postDelayed(() -> pageScroll.smoothScrollTo(0, enrollCard.getTop()), 120);
+    }
+
+    void drawTailnetPeers(DiscoveryEngine.Result result) {
+        scanCards.removeAllViews();
+        JSONArray peers = result.peers;
+        scanInfo.setText(result.note);
+        show(result.note);
+        if (peers.length() == 0) {
+            put(scanCards, text("No peers discovered. Tailscale must be connected. On first use, WiFi HUB needs a reachable gateway via MagicDNS or the local network; it cannot directly read the Tailscale app's private device database.", 12, MUTED, false), 10);
+            return;
+        }
+        int online = 0, gatewayCount = 0;
+        for (int i = 0; i < peers.length(); i++) {
+            JSONObject peer = peers.optJSONObject(i);
+            if (peer == null) continue;
+            String ip = peer.optString("ip");
+            String name = peer.optString("name", ip);
+            String os = peer.optString("os", "Device");
+            boolean available = peer.optBoolean("online", false);
+            boolean hasGateway = peer.optBoolean("gateway", false);
+            if (available) online++;
+            if (hasGateway) gatewayCount++;
+
+            LinearLayout item = vertical();
+            item.setPadding(dp(12), dp(10), dp(12), dp(8));
+            item.setBackground(shape(0xff111f34, 12, BORDER));
+            put(item, text((available ? "●  " : "○  ") + name, 15, available ? ACCENT : MUTED, true), 4);
+            put(item, text(ip + "  •  " + os + "  •  " +
+                    (available ? "Online" : "Offline") +
+                    (hasGateway ? "  •  Gateway ready" : ""), 12, MUTED, false), 9);
+            if (available && hasGateway) {
+                int idx = knownHostIndex(ip);
+                if (idx >= 0) {
+                    action(item, "Control this computer", true, v -> {
+                        selected = idx; persist(); drawHosts(); showTab(2); refresh();
                     });
+                } else {
+                    action(item, "Approve this computer for ADB control", false,
+                            v -> prepareApproval(ip, name));
+                }
+            } else if (available && "android".equalsIgnoreCase(os)) {
+                action(item, "Use as Android pairing target", false, v -> {
+                    targetIp.setText(ip);
+                    showTab(3);
+                    show(name + " selected. Use the temporary Android pairing port and code.");
                 });
             }
-            show("Found " + shown + " online tailnet peers. Probing gateways.");
-        });
+            put(scanCards, item, 9);
+        }
+        scanInfo.setText("Found " + peers.length() + " devices (" + online +
+                " online), " + gatewayCount + " active WiFi HUB gateways.");
     }
     void pairPhone() {
         String ip = value(targetIp), code = value(pairCode); int p = port(pairPort);

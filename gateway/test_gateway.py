@@ -80,5 +80,24 @@ adb-other-foo\t_adb-tls-pairing._tcp\t100.99.16.99:42342
             server.server_close()
             upstream.close()
 
+    def test_discovery_inventory_without_enrollment(self):
+        import json
+        import threading
+        from http.server import ThreadingHTTPServer
+        from urllib.request import urlopen
+        server = ThreadingHTTPServer(("127.0.0.1", 0), gateway.Handler)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        try:
+            fake = {"self":{"name":"host","ip":"100.70.1.1","online":True,"os":"linux"},
+                    "peers":[{"name":"phone","ip":"100.80.1.2","online":True,"os":"android"}]}
+            with patch.object(gateway, "tailnet", return_value=fake):
+                with urlopen("http://127.0.0.1:%d/v1/discover" % server.server_port, timeout=4) as response:
+                    body=json.load(response)
+            self.assertTrue(body["ok"])
+            self.assertEqual(body["peers"][0]["os"], "android")
+        finally:
+            server.shutdown(); server.server_close()
+
 if __name__ == "__main__":
     unittest.main()

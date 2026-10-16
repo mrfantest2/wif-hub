@@ -6,7 +6,7 @@ SERVICE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 mkdir -p "$SERVICE_DIR"
 cat > "$SERVICE_DIR/wif-hub.service" <<EOF
 [Unit]
-Description=WiF HUB ADB Gateway (Tailscale)
+Description=WiFi HUB ADB Gateway (Tailscale)
 After=network-online.target
 
 [Service]

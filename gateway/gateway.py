@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""WiF HUB gateway: authenticated ADB controller, Tailscale-bound, stdlib-only."""
+"""WiFi HUB gateway: authenticated ADB controller, Tailscale-bound, stdlib-only."""
 from __future__ import annotations
 import argparse
 import hashlib
@@ -70,7 +70,7 @@ def bind_ip():
     data = tailnet().get("self")
     if data and data.get("ip"):
         return data["ip"]
-    raise RuntimeError("Tailscale IPv4 not found. Start/sign in to Tailscale before running WiF HUB.")
+    raise RuntimeError("Tailscale IPv4 not found. Start/sign in to Tailscale before running WiFi HUB.")
 
 def validate_target(host, port):
     if not isinstance(host, str) or len(host) > 253: raise ValueError("Invalid IP")
@@ -142,7 +142,7 @@ def token_ok(header):
         return any(secrets.compare_digest(digest, x) for x in identity().get("clients", {}).values())
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "WiFHUB/0.1"
+    server_version = "WiFiHUB/0.2"
     def log_message(self, fmt, *args):
         # Prevent bearer token or pairing code from appearing in access logs
         print(f"{self.address_string()} {self.command} {urlsplit(self.path).path} {args[-1] if args else ''}", flush=True)
@@ -172,8 +172,15 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlsplit(self.path).path
         if path == "/v1/info":
-            self.reply(200, {"ok": True, "name": socket.gethostname(), "version": "0.1",
+            self.reply(200, {"ok": True, "name": socket.gethostname(), "version": "0.2",
                              "enrollment": True, "platform": sys.platform})
+            return
+        if path == "/v1/discover":
+            # Only the minimal tailnet inventory is available anonymously.
+            # This interface is bound to the tailnet IPv4, not the public internet.
+            data = tailnet()
+            self.reply(200, {"ok": "error" not in data, "self": data.get("self"),
+                             "peers": data.get("peers", []), "error": data.get("error", "")})
             return
         if not self.authorized(): return
         if path == "/v1/state":
@@ -253,8 +260,37 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as exc:
             self.reply(400, {"ok": False, "error": str(exc)})
 
+def discovery_beacon(tail_ip, port):
+    """Same-LAN UDP advertisement, no ADB control or credentials exposed."""
+    signature = b"WIFIHUB_DISCOVER_V1"
+    response = json.dumps({"kind": "wifi-hub-gateway", "ip": tail_ip,
+                           "port": port, "name": socket.gethostname()}).encode("utf-8")
+    try:
+        udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        udp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        udp.bind(("0.0.0.0", 42426))
+        udp.settimeout(1.0)
+    except OSError as exc:
+        print(f"LAN discovery beacon unavailable: {exc}", flush=True)
+        return
+    with udp:
+        while True:
+            try:
+                data, client = udp.recvfrom(256)
+                if data != signature:
+                    continue
+                source = ipaddress.ip_address(client[0])
+                if not source.is_private or source.is_loopback:
+                    continue
+                udp.sendto(response, client)
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+
+
 def main():
-    p = argparse.ArgumentParser(description="WiF HUB Tailscale ADB gateway")
+    p = argparse.ArgumentParser(description="WiFi HUB Tailscale ADB gateway")
     p.add_argument("action", nargs="?", choices=["serve", "show-code", "rotate-code"], default="serve")
     p.add_argument("--port", type=int, default=PORT)
     args = p.parse_args()
@@ -264,10 +300,11 @@ def main():
             db["code"] = f"{secrets.randbelow(1000000):06d}"
             save_identity(db)
         if args.action in ("show-code", "rotate-code"):
-            print("WiF HUB approval code:", db["code"]); return
+            print("WiFi HUB approval code:", db["code"]); return
     ip = bind_ip()
     server = ThreadingHTTPServer((ip, args.port), Handler)
-    print(f"WiF HUB gateway: http://{ip}:{args.port}", flush=True)
+    threading.Thread(target=discovery_beacon, args=(ip, args.port), daemon=True).start()
+    print(f"WiFi HUB gateway: http://{ip}:{args.port}", flush=True)
     print(f"Host approval code: {db['code']} (changes after each enrollment)", flush=True)
     print("Listening only on Tailscale IPv4. Keep this window running.", flush=True)
     try: server.serve_forever(poll_interval=0.25)

@@ -1,4 +1,28 @@
-# WiF HUB
+# WiFi HUB
+
+## Automatic Tailscale discovery (v0.1.4)
+
+Open the native Android app and the **Scan** tab starts searching immediately. It attempts
+(a) a WiFi HUB LAN broadcast beacon on the local Wi-Fi, (b) common Tailscale MagicDNS gateway
+names when DNS is enabled, (c) previously approved gateways, and (d) an existing local SSH
+fallback tunnel. The first reachable WiFi HUB gateway returns a read-only **tailnet inventory**
+(including Linux, Windows, and Android peers, online/offline). The app displays machines and
+their tailnet addresses, checks which run WiFi HUB, and lets you select a computer or phone
+without entering its IP address.
+
+**Security:** Discovery and peer listing are read-only and only accessible via the tailnet-bound
+gateway endpoint; ADB pairing, USB/Wireless Debugging controls, and any state-changing actions
+still require device authorization and per-gateway enrollment. A host approval code is requested
+only once per controller/host and never shipped in the public repository.
+
+**Important technical limitation:** Tailscale's Android VPN app does not expose its complete
+peer inventory to unrelated Android apps. Discovery of *remote* machines without any already
+reachable gateway, shared LAN, MagicDNS resolution, or optional Tailscale API authorization
+cannot be guaranteed. WiFi HUB does **not** brute-force Tailscale's 100.64/10 address space.
+For best zero-entry onboarding, run a gateway on one nearby computer on the same Wi-Fi and
+allow local UDP 42426. The gateway then returns the wider tailnet's peer list. Other tailnets
+and device names are supported; the app is not tied to specific IP addresses.
+
 
 Multi-host, Tailscale-powered ADB management from Android. Open-source personal/device-lab control without cloud hosting.
 
@@ -28,9 +52,9 @@ Gateway shows its Tailscale IP and a six-digit computer enrollment code in the t
 
 **Linux (systemd user service)**: Run \`bash gateway/install-linux-user.sh\`, then \`systemctl --user start wif-hub\`. The installer enables startup on user login. To keep it active without login, use \`sudo loginctl enable-linger $USER\` if permitted. Check \`systemctl --user status wif-hub\`.
 
-**Windows (hidden scheduled task)**: Run PowerShell \`gateway/install-windows.ps1\` once. It registers a hidden per-user task at login, without additional PowerShell windows. Start manually with \`Start-ScheduledTask -TaskName "WiF HUB Gateway"\` only if no instance already occupies port 42424.
+**Windows (hidden scheduled task)**: Run PowerShell \`gateway/install-windows.ps1\` once. It registers a hidden per-user task at login, without additional PowerShell windows. Start manually with \`Start-ScheduledTask -TaskName "WiFi HUB Gateway"\` only if no instance already occupies port 42424.
 
-**Fallback**: If the gateway service is unreachable, an authorized remote-desktop tool can be used separately to restart it on that computer. WiF HUB does not embed or bypass remote-desktop credentials.
+**Fallback**: If the gateway service is unreachable, an authorized remote-desktop tool can be used separately to restart it on that computer. WiFi HUB does not embed or bypass remote-desktop credentials.
 
 ## Current features (v0.1.3)
 
@@ -44,12 +68,12 @@ Gateway shows its Tailscale IP and a six-digit computer enrollment code in the t
 - Tailscale app/developer settings shortcuts on Android.
 - Startup helpers for Windows Task Scheduler and Linux systemd user services.
 
-**Existing AgentBox installations:** the nftables input policy drops WiF HUB TCP 42424 until the operator authorizes the targeted rule. See [gateway/FIREWALL.md](gateway/FIREWALL.md). This is a one-time administrator step, not a reason to disable the firewall.
+**Existing AgentBox installations:** the nftables input policy drops WiFi HUB TCP 42424 until the operator authorizes the targeted rule. See [gateway/FIREWALL.md](gateway/FIREWALL.md). This is a one-time administrator step, not a reason to disable the firewall.
 
 ## Android operation
 
-1. Open WiF HUB on Android. Enroll at least one host.
-2. Select **Master PC** or **AgentBox**, or any enrolled gateway. **Discover peers** lists online tailnet devices, offers Android targets, and polls Tailscale's peer list through that gateway and probes only peers for the WiF HUB server.
+1. Open WiFi HUB on Android. Enroll at least one host.
+2. Select **Master PC** or **AgentBox**, or any enrolled gateway. **Discover peers** lists online tailnet devices, offers Android targets, and polls Tailscale's peer list through that gateway and probes only peers for the WiFi HUB server.
 3. **Scan** lists ADB devices and local mDNS debugging services on that host.
 4. **Pair** uses IP + pairing port + six-digit Android code (Android Settings → Developer options → Wireless debugging → Pair with pairing code).
 5. **Connect** uses IP + a **different** connection port from the main Wireless debugging screen. Tapping Pair doesn't automatically make the pairing endpoint the connection port.
