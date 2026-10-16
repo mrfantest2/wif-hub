@@ -32,6 +32,20 @@ Gateway shows its Tailscale IP and a six-digit computer enrollment code in the t
 
 **Fallback**: If the gateway service is unreachable, an authorized remote-desktop tool can be used separately to restart it on that computer. WiF HUB does not embed or bypass remote-desktop credentials.
 
+## Current features (v0.1.3)
+
+- Four compact navigation tabs: Hosts, Devices, Pair, Helper.
+- Windows/Linux gateway selection with per-host enrollment credentials.
+- Tailnet peer inventory and local Android mDNS ADB discovery.
+- Separate Android pairing port and wireless debugging connection port.
+- Authenticated TCP reachability preflight on the selected computer.
+- Explicit, authorized-device-only request to enable Android Wireless Debugging.
+- Manual USB-authorized ADB TCP/IP 5555 switching as an optional legacy alternative.
+- Tailscale app/developer settings shortcuts on Android.
+- Startup helpers for Windows Task Scheduler and Linux systemd user services.
+
+**Existing AgentBox installations:** the nftables input policy drops WiF HUB TCP 42424 until the operator authorizes the targeted rule. See [gateway/FIREWALL.md](gateway/FIREWALL.md). This is a one-time administrator step, not a reason to disable the firewall.
+
 ## Android operation
 
 1. Open WiF HUB on Android. Enroll at least one host.
@@ -59,7 +73,7 @@ APK output: `android/app/build/outputs/apk/debug/app-debug.apk`.
 
 - Public: `GET /v1/info`, `POST /v1/enroll`.
 - Authenticated: `GET /v1/state`, `GET /v1/devices`, `GET /v1/mdns`, `GET /v1/peers`.
-- Authenticated writes: `POST /v1/pair`, `/v1/connect`, `/v1/disconnect`, `/v1/tcpip`, `/v1/reconnect`.
+- Authenticated writes: `POST /v1/pair`, `/v1/connect`, `/v1/disconnect`, `/v1/tcpip`, `/v1/reconnect`, `/v1/probe`, `/v1/wifi-enable`.
 - Auth: `Authorization: Bearer <per-host enrollment token>`.
 
 Only local-authorized devices and eligible private/Tailscale target addresses are supported.

@@ -46,6 +46,10 @@ public final class MainActivity extends Activity {
     private JSONArray hosts = new JSONArray();
     private int selected = -1;
     private LinearLayout base, hostCards, discoveredCards, deviceCards, serviceCards;
+    private ScrollView pageScroll;
+    private View[] pageSections;
+    private Button[] tabButtons;
+    private int activeTab = 0;
     private TextView banner, currentHost, helperInfo;
     private EditText hostIp, hostPort, hostCode, hostName, targetIp, pairPort, pairCode, connectPort;
     private boolean alive = true;
@@ -117,7 +121,7 @@ public final class MainActivity extends Activity {
         banner.setTextColor(message.startsWith("Error") ? RED : ACCENT);
     }
     void layout() {
-        ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(BG);
+        ScrollView scroll = new ScrollView(this); pageScroll = scroll; scroll.setFillViewport(true); scroll.setBackgroundColor(BG);
         base = vertical(); base.setPadding(dp(18), dp(16), dp(18), dp(32));
         scroll.addView(base);
         scroll.setClipToPadding(true);
@@ -139,7 +143,26 @@ public final class MainActivity extends Activity {
         put(base, text("Private ADB command center • Tailscale", 13, MUTED, false), 14);
         banner = text("Select a gateway or enroll a new computer.", 13, ACCENT, false);
         banner.setPadding(dp(12), dp(12), dp(12), dp(12));
-        banner.setBackground(shape(0xff13333b, 10, 0xff23595a)); put(base, banner, 17);
+        banner.setBackground(shape(0xff13333b, 10, 0xff23595a)); put(base, banner, 15);
+
+        LinearLayout tabs = new LinearLayout(this);
+        tabs.setOrientation(LinearLayout.HORIZONTAL);
+        tabs.setPadding(dp(4), dp(4), dp(4), dp(4));
+        tabs.setBackground(shape(PANEL, 14, BORDER));
+        String[] tabNames = {"Hosts", "Devices", "Pair", "Helper"};
+        tabButtons = new Button[tabNames.length];
+        for (int i = 0; i < tabNames.length; i++) {
+            final int tab = i;
+            Button b = button(tabNames[i], false, v -> showTab(tab));
+            b.setTextSize(12);
+            b.setMinimumHeight(dp(43));
+            b.setMinHeight(dp(43));
+            LinearLayout.LayoutParams item = new LinearLayout.LayoutParams(0, dp(44), 1);
+            item.setMargins(dp(2), 0, dp(2), 0);
+            tabs.addView(b, item);
+            tabButtons[i] = b;
+        }
+        put(base, tabs, 15);
 
         LinearLayout gateway = card(base, "01   Gateways", "Manage multiple Windows and Linux computers.");
         currentHost = text("No gateway selected", 13, MUTED, true); put(gateway, currentHost, 10);
@@ -155,6 +178,7 @@ public final class MainActivity extends Activity {
         hostIp = input(enroll, "Computer Tailscale IP (100.x.x.x)", "", 0);
         hostPort = input(enroll, "Gateway port", "42424", 2);
         hostCode = input(enroll, "Six-digit host approval code", "", 2);
+        action(enroll, "Test gateway reachability", false, v -> testGateway());
         action(enroll, "Connect and enroll", true, v -> enrollHost());
 
         LinearLayout dev = card(base, "03   ADB device inventory",
@@ -168,8 +192,10 @@ public final class MainActivity extends Activity {
         targetIp = input(pair, "Target phone IP (Wi-Fi or Tailscale)", "", 0);
         pairPort = input(pair, "Pairing port from pairing dialog", "", 2);
         pairCode = input(pair, "Six-digit Android pairing code", "", 2);
+        action(pair, "Check pairing endpoint", false, v -> probePhone(pairPort));
         action(pair, "Pair through selected PC", true, v -> pairPhone());
         connectPort = input(pair, "Connection port (different from pairing port)", "", 2);
+        action(pair, "Check connection endpoint", false, v -> probePhone(connectPort));
         action(pair, "Connect ADB using connection port", false, v -> connectPhone());
         action(pair, "Disconnect ADB at this address", false, v -> disconnectPhone());
 
@@ -189,7 +215,32 @@ public final class MainActivity extends Activity {
         });
         put(helper, text("Secure pairing and USB authorization cannot be forced on an unprivileged Android device. A previously ADB-authorized host can request TCP/IP mode.", 12, MUTED, false), 0);
         helperInfo.setText("Phone tailnet IP: " + (localTailIp() == null ? "not detected" : localTailIp()));
-        put(base, text("WiF HUB v0.1.2  •  Local-only gateway  •  No cloud account", 11, MUTED, false), 10);
+        action(helper, "Open Tailscale app", false, v -> {
+            try {
+                Intent launch = getPackageManager().getLaunchIntentForPackage("com.tailscale.ipn");
+                if (launch == null) {
+                    show("Error: Tailscale app is not installed or visible on this phone.");
+                } else startActivity(launch);
+            } catch (Exception ex) { show("Error opening Tailscale: " + ex.getMessage()); }
+        });
+        put(base, text("WiF HUB v0.1.3  •  Private gateways  •  No cloud hosting", 11, MUTED, false), 10);
+        pageSections = new View[]{gateway, enroll, dev, pair, helper};
+        showTab(0);
+    }
+
+    void showTab(int tab) {
+        if (pageSections == null || tabButtons == null || tab < 0 || tab > 3) return;
+        activeTab = tab;
+        for (int i = 0; i < pageSections.length; i++) {
+            int owner = i == 0 || i == 1 ? 0 : i - 1;
+            pageSections[i].setVisibility(owner == tab ? View.VISIBLE : View.GONE);
+        }
+        for (int i = 0; i < tabButtons.length; i++) {
+            boolean on = i == tab;
+            tabButtons[i].setTextColor(on ? BG : MUTED);
+            tabButtons[i].setBackground(shape(on ? ACCENT : PANEL, 11, on ? 0 : BORDER));
+        }
+        if (pageScroll != null) pageScroll.post(() -> pageScroll.smoothScrollTo(0, 0));
     }
 
     String localTailIp() {
@@ -290,6 +341,29 @@ public final class MainActivity extends Activity {
             if (refreshAfter) refresh();
         });
     }
+    void testGateway() {
+        String ip = value(hostIp); int p = port(hostPort);
+        if (!validIp(ip) || p < 1) { show("Error: Enter a numeric Tailscale IP and gateway port."); return; }
+        show("Testing gateway " + ip + ":" + p + "…");
+        request(ip, p, null, "/v1/info", null, response -> {
+            if (response.optBoolean("ok"))
+                show("Gateway reachable: " + response.optString("name") + " (" + response.optString("platform") + "). Enter its approval code.");
+            else
+                show("Error: Gateway unreachable: " + response.optString("error", "Check Tailscale ACL/firewall and port."));
+        });
+    }
+
+    void probePhone(EditText field) {
+        String ip = value(targetIp); int p = port(field);
+        if (!validIp(ip) || p < 1) { show("Error: Enter phone IP and active Android debugging port."); return; }
+        try {
+            show("Checking ADB endpoint through selected computer…");
+            requestSelected("/v1/probe", new JSONObject().put("host", ip).put("port", p), response ->
+                show((response.optBoolean("ok") ? "Reachable: " : "Error: ") +
+                     response.optString("output", response.optString("error", "No response"))));
+        } catch (Exception ex) { show("Error: " + ex.getMessage()); }
+    }
+
     void enrollHost() {
         String ip = value(hostIp), code = value(hostCode), name = value(hostName);
         int p = port(hostPort);
@@ -344,11 +418,16 @@ public final class MainActivity extends Activity {
                 c.setBackground(shape(0xff111f34, 10, BORDER));
                 put(c, text((state.equals("device") ? "●  " : "○  ") + serial, 14, state.equals("device") ? ACCENT : RED, true), 4);
                 put(c, text(state.toUpperCase() + "  " + d.optString("details"), 11, MUTED, false), 9);
-                if (state.equals("device"))
+                if (state.equals("device")) {
+                    action(c, "Request Wireless debugging ON", false, v -> {
+                        try { postSelected("/v1/wifi-enable", new JSONObject().put("serial", serial), true); }
+                        catch (Exception ex) { show("Error: " + ex.getMessage()); }
+                    });
                     action(c, "Request TCP/IP on port 5555", false, v -> {
                         try { postSelected("/v1/tcpip", new JSONObject().put("serial", serial), true); }
                         catch (Exception ex) { show("Error: " + ex.getMessage()); }
                     });
+                }
                 put(deviceCards, c, 9);
             }
             JSONObject mdns = response.optJSONObject("mdns");
@@ -367,6 +446,7 @@ public final class MainActivity extends Activity {
                         if ("pair".equals(s.optString("kind"))) pairPort.setText(String.valueOf(sp));
                         else connectPort.setText(String.valueOf(sp));
                         show("Endpoint copied into pairing / connection form.");
+                        showTab(2);
                     });
                     put(serviceCards, c, 8);
                 }

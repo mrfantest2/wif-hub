@@ -38,5 +38,47 @@ adb-other-foo\t_adb-tls-pairing._tcp\t100.99.16.99:42342
             self.assertFalse(gateway.token_ok("Bearer wrong"))
             self.assertFalse(gateway.token_ok(""))
 
+    def test_wireless_debugging_already_on(self):
+        with patch.object(gateway, "run", return_value={"ok": True, "output": "1"}) as cmd:
+            result = gateway.enable_wireless_debugging("100.99.16.99:45555")
+        self.assertTrue(result["ok"])
+        self.assertEqual(cmd.call_count, 1)  # no toggle when already enabled
+
+    def test_wireless_debugging_authorized_toggle(self):
+        with patch.object(gateway, "run", side_effect=[
+            {"ok": True, "output": "0"},
+            {"ok": True, "output": ""},
+            {"ok": True, "output": "1"}]) as cmd:
+            result = gateway.enable_wireless_debugging("100.99.16.99:45555")
+        self.assertTrue(result["ok"])
+        self.assertEqual(cmd.call_count, 3)
+        self.assertIn("adb_wifi_enabled", cmd.call_args_list[1].args[0])
+
+    def test_probe_endpoint_authenticated(self):
+        import socket
+        import threading
+        from http.server import ThreadingHTTPServer
+        from urllib.request import Request, urlopen
+        import json
+        upstream = socket.socket()
+        upstream.bind(("127.0.0.1", 0))
+        upstream.listen(1)
+        server = ThreadingHTTPServer(("127.0.0.1", 0), gateway.Handler)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        try:
+            data = json.dumps({"host": "127.0.0.1", "port": upstream.getsockname()[1]}).encode()
+            req = Request(f"http://127.0.0.1:{server.server_port}/v1/probe",
+                          data=data, method="POST",
+                          headers={"Authorization": "Bearer test", "Content-Type": "application/json"})
+            with patch.object(gateway, "token_ok", return_value=True):
+                with urlopen(req, timeout=4) as response:
+                    result = json.load(response)
+            self.assertTrue(result["ok"], result)
+        finally:
+            server.shutdown()
+            server.server_close()
+            upstream.close()
+
 if __name__ == "__main__":
     unittest.main()

@@ -102,6 +102,22 @@ def adb_devices():
             devices.append({"serial": match[1], "state": match[2], "details": match[3] or ""})
     return {"ok": result["ok"], "devices": devices, "raw": result["output"]}
 
+def enable_wireless_debugging(serial):
+    """Best-effort on an *already authorized* ADB serial; never overrides pairing consent."""
+    state = run([adb(), "-s", serial, "shell", "settings", "get", "global", "adb_wifi_enabled"], 10)
+    if not state["ok"]:
+        return {"ok": False, "output": "Unable to read Wireless debugging state: " + state["output"]}
+    if state["output"].strip() == "1":
+        return {"ok": True, "output": "Wireless debugging already reports enabled. Use the connection port shown in Android settings."}
+    changed = run([adb(), "-s", serial, "shell", "settings", "put", "global", "adb_wifi_enabled", "1"], 10)
+    if not changed["ok"]:
+        return {"ok": False, "output": "Android denied setting change; enable in Developer options. " + changed["output"]}
+    verify = run([adb(), "-s", serial, "shell", "settings", "get", "global", "adb_wifi_enabled"], 10)
+    if verify["ok"] and verify["output"].strip() == "1":
+        return {"ok": True, "output": "Android reports Wireless debugging enabled. Open the phone's Developer options to confirm its port and pairing approval."}
+    return {"ok": False, "output": "Wireless debugging toggle did not remain enabled; manually enable in Developer options."}
+
+
 def mdns_services():
     result = run([adb(), "mdns", "services"], 10)
     found = []
@@ -210,11 +226,25 @@ class Handler(BaseHTTPRequestHandler):
                     result = run([adb(), "connect", target], 18)
                 else:
                     result = run([adb(), "disconnect", target], 12)
+            elif path == "/v1/probe":
+                endpoint = validate_target(body.get("host"), body.get("port"))
+                host, port = body["host"], body["port"]
+                try:
+                    with socket.create_connection((host, port), timeout=3):
+                        pass
+                    result = {"ok": True, "output": f"TCP endpoint {endpoint} is reachable"}
+                except (socket.timeout, OSError) as exc:
+                    result = {"ok": False, "output": f"TCP endpoint {endpoint}: {exc}"}
             elif path == "/v1/tcpip":
                 serial = safe_serial(body.get("serial"))
                 if serial not in [d["serial"] for d in adb_devices()["devices"] if d["state"] == "device"]:
                     raise ValueError("Device must already be ADB-authorized on this computer")
                 result = run([adb(), "-s", serial, "tcpip", "5555"], 15)
+            elif path == "/v1/wifi-enable":
+                serial = safe_serial(body.get("serial"))
+                if serial not in [d["serial"] for d in adb_devices()["devices"] if d["state"] == "device"]:
+                    raise ValueError("Device must already be ADB-authorized on this computer")
+                result = enable_wireless_debugging(serial)
             elif path == "/v1/reconnect":
                 result = run([adb(), "reconnect", "offline"], 12)
             else:

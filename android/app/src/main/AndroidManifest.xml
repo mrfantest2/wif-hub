@@ -1,6 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <queries><package android:name="com.tailscale.ipn"/></queries>
     <application android:allowBackup="false" android:usesCleartextTraffic="true"
         android:label="WiF HUB" android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:icon="@drawable/wifhub_icon" android:supportsRtl="true">
