@@ -1,0 +1,16 @@
+# Android and local build products
+.gradle/
+**/build/
+**/.idea/
+*.iml
+local.properties
+*.apk
+*.aab
+*.keystore
+*.jks
+# Local gateway secrets
+identity.json
+*.pyc
+__pycache__/
+.venv/
+*.log
