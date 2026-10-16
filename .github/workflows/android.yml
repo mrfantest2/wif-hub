@@ -16,9 +16,10 @@ jobs:
           java-version: '17'
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.13
-      - run: python -m unittest discover -s gateway -p test_*.py -v
-      - uses: android-actions/setup-android@v3
+          python-version: '3.13'
+      - run: python -m unittest discover -s gateway -p 'test_*.py' -v
+      # GitHub Ubuntu runners already ship Android SDK; setup-android@v3 incorrectly
+      # requests removed SDK package 'tools' and fails before the build.
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'

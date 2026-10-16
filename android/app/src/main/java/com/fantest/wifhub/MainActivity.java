@@ -189,7 +189,7 @@ public final class MainActivity extends Activity {
         });
         put(helper, text("Secure pairing and USB authorization cannot be forced on an unprivileged Android device. A previously ADB-authorized host can request TCP/IP mode.", 12, MUTED, false), 0);
         helperInfo.setText("Phone tailnet IP: " + (localTailIp() == null ? "not detected" : localTailIp()));
-        put(base, text("WiF HUB v0.1.1  •  Local-only gateway  •  No cloud account", 11, MUTED, false), 10);
+        put(base, text("WiF HUB v0.1.2  •  Local-only gateway  •  No cloud account", 11, MUTED, false), 10);
     }
 
     String localTailIp() {
