@@ -24,10 +24,18 @@ Gateway shows its Tailscale IP and a six-digit computer enrollment code in the t
 
 **Windows note**: if `tailscale` is not on PATH, add `C:\\Program Files\\Tailscale` to PATH; if `adb` is missing install Android SDK Platform Tools. Grant inbound access to this port only through the private Tailscale interface.
 
+## Run in the background
+
+**Linux (systemd user service)**: Run \`bash gateway/install-linux-user.sh\`, then \`systemctl --user start wif-hub\`. The installer enables startup on user login. To keep it active without login, use \`sudo loginctl enable-linger $USER\` if permitted. Check \`systemctl --user status wif-hub\`.
+
+**Windows (hidden scheduled task)**: Run PowerShell \`gateway/install-windows.ps1\` once. It registers a hidden per-user task at login, without additional PowerShell windows. Start manually with \`Start-ScheduledTask -TaskName "WiF HUB Gateway"\` only if no instance already occupies port 42424.
+
+**Fallback**: If the gateway service is unreachable, an authorized remote-desktop tool can be used separately to restart it on that computer. WiF HUB does not embed or bypass remote-desktop credentials.
+
 ## Android operation
 
 1. Open WiF HUB on Android. Enroll at least one host.
-2. Select **Master PC** or **AgentBox**, or any enrolled gateway. **Discover peers** polls Tailscale's peer list through that gateway and probes only peers for the WiF HUB server.
+2. Select **Master PC** or **AgentBox**, or any enrolled gateway. **Discover peers** lists online tailnet devices, offers Android targets, and polls Tailscale's peer list through that gateway and probes only peers for the WiF HUB server.
 3. **Scan** lists ADB devices and local mDNS debugging services on that host.
 4. **Pair** uses IP + pairing port + six-digit Android code (Android Settings → Developer options → Wireless debugging → Pair with pairing code).
 5. **Connect** uses IP + a **different** connection port from the main Wireless debugging screen. Tapping Pair doesn't automatically make the pairing endpoint the connection port.

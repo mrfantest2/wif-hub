@@ -120,9 +120,17 @@ public final class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(BG);
         base = vertical(); base.setPadding(dp(18), dp(16), dp(18), dp(32));
         scroll.addView(base);
+        scroll.setClipToPadding(true);
         scroll.setOnApplyWindowInsetsListener((v, insets) -> {
-            android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
-            base.setPadding(dp(18), bars.top + dp(16), dp(18), bars.bottom + dp(32));
+            int top, bottom;
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
+                top = bars.top; bottom = bars.bottom;
+            } else {
+                top = insets.getSystemWindowInsetTop();
+                bottom = insets.getSystemWindowInsetBottom();
+            }
+            scroll.setPadding(0, top, 0, bottom);
             return insets;
         });
         setContentView(scroll);
@@ -181,7 +189,7 @@ public final class MainActivity extends Activity {
         });
         put(helper, text("Secure pairing and USB authorization cannot be forced on an unprivileged Android device. A previously ADB-authorized host can request TCP/IP mode.", 12, MUTED, false), 0);
         helperInfo.setText("Phone tailnet IP: " + (localTailIp() == null ? "not detected" : localTailIp()));
-        put(base, text("WiF HUB v0.1.0  •  Local-only gateway  •  No cloud account", 11, MUTED, false), 10);
+        put(base, text("WiF HUB v0.1.1  •  Local-only gateway  •  No cloud account", 11, MUTED, false), 10);
     }
 
     String localTailIp() {
@@ -373,24 +381,35 @@ public final class MainActivity extends Activity {
             JSONArray peers = response.optJSONArray("peers");
             if (peers == null) { show("Error: " + response.optString("error", "No peer listing")); return; }
             discoveredCards.removeAllViews();
-            put(discoveredCards, text("Discoverable computers (probed on port 42424)", 12, MUTED, true), 7);
+            put(discoveredCards, text("Tailnet peers • choose a phone or check for gateways", 12, MUTED, true), 7);
+            int shown = 0;
             for (int i = 0; i < peers.length(); i++) {
-                JSONObject peer = peers.optJSONObject(i); if (peer == null || !peer.optBoolean("online", true)) continue;
-                String ip = peer.optString("ip"), host = peer.optString("name");
+                JSONObject peer = peers.optJSONObject(i);
+                if (peer == null || !peer.optBoolean("online", true)) continue;
+                String ip = peer.optString("ip"), host = peer.optString("name"), os = peer.optString("os", "");
                 if (!validIp(ip)) continue;
+                shown++;
+                LinearLayout row = vertical(); row.setPadding(dp(9), dp(9), dp(9), dp(6));
+                row.setBackground(shape(0xff182e3e, 10, BORDER));
+                put(row, text(host + " • " + os, 13, WHITE, true), 4);
+                put(row, text(ip, 12, MUTED, false), 8);
+                action(row, "Use IP as Android target", false, v -> {
+                    targetIp.setText(ip);
+                    show("Target IP selected: " + host + ". Enter its active ADB pairing/connection port.");
+                });
+                TextView gatewayState = text("Checking for WiF HUB gateway…", 11, MUTED, false);
+                put(row, gatewayState, 6);
+                put(discoveredCards, row, 8);
                 request(ip, 42424, null, "/v1/info", null, check -> {
-                    if (!check.optBoolean("ok")) return;
-                    LinearLayout row = vertical(); row.setPadding(dp(8), dp(8), dp(8), dp(5));
-                    row.setBackground(shape(0xff182e3e, 10, BORDER));
-                    put(row, text(host + "  •  " + ip, 13, WHITE, true), 5);
-                    action(row, "Prepare enrollment", false, v -> {
+                    if (!check.optBoolean("ok")) { gatewayState.setText("Gateway not responding"); return; }
+                    gatewayState.setText("WiF HUB gateway available");
+                    action(row, "Prepare gateway enrollment", false, v -> {
                         hostIp.setText(ip); hostName.setText(host); hostPort.setText("42424");
-                        show("Found gateway " + host + ". Enter its computer approval code below.");
+                        show("Found gateway " + host + ". Enter its computer approval code.");
                     });
-                    put(discoveredCards, row, 8);
                 });
             }
-            show("Tailnet peer scan started for " + peers.length() + " devices.");
+            show("Found " + shown + " online tailnet peers. Probing gateways.");
         });
     }
     void pairPhone() {
