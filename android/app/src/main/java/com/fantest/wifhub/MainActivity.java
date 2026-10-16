@@ -145,7 +145,7 @@ public final class MainActivity extends Activity {
                 "Obtain the six-digit approval code from the gateway's terminal.");
         hostName = input(enroll, "Display name (optional)", "", 0);
         hostIp = input(enroll, "Computer Tailscale IP (100.x.x.x)", "", 0);
-        hostPort = input(enroll, "Gateway port", "8765", 2);
+        hostPort = input(enroll, "Gateway port", "42424", 2);
         hostCode = input(enroll, "Six-digit host approval code", "", 2);
         action(enroll, "Connect and enroll", true, v -> enrollHost());
 
@@ -213,7 +213,7 @@ public final class MainActivity extends Activity {
         for (int i = 0; i < hosts.length(); i++) {
             final int index = i; JSONObject h = hosts.optJSONObject(i); if (h == null) continue;
             String title = (index == selected ? "●  " : "○  ") + h.optString("name", "Gateway");
-            String info = h.optString("ip") + ":" + h.optInt("port", 8765);
+            String info = h.optString("ip") + ":" + h.optInt("port", 42424);
             LinearLayout row = vertical();
             row.setPadding(dp(10), dp(9), dp(10), dp(6));
             row.setBackground(shape(index == selected ? 0xff174b50 : 0xff142036, 12, index == selected ? ACCENT : BORDER));
@@ -273,7 +273,7 @@ public final class MainActivity extends Activity {
     void requestSelected(String path, JSONObject data, Receive receive) {
         JSONObject h = chosen();
         if (h == null) { show("Error: Choose or enroll a computer first."); return; }
-        request(h.optString("ip"), h.optInt("port", 8765), h.optString("token"), path, data, receive);
+        request(h.optString("ip"), h.optInt("port", 42424), h.optString("token"), path, data, receive);
     }
     void postSelected(String path, JSONObject body, boolean refreshAfter) {
         requestSelected(path, body, response -> {
@@ -373,18 +373,18 @@ public final class MainActivity extends Activity {
             JSONArray peers = response.optJSONArray("peers");
             if (peers == null) { show("Error: " + response.optString("error", "No peer listing")); return; }
             discoveredCards.removeAllViews();
-            put(discoveredCards, text("Discoverable computers (probed on port 8765)", 12, MUTED, true), 7);
+            put(discoveredCards, text("Discoverable computers (probed on port 42424)", 12, MUTED, true), 7);
             for (int i = 0; i < peers.length(); i++) {
                 JSONObject peer = peers.optJSONObject(i); if (peer == null || !peer.optBoolean("online", true)) continue;
                 String ip = peer.optString("ip"), host = peer.optString("name");
                 if (!validIp(ip)) continue;
-                request(ip, 8765, null, "/v1/info", null, check -> {
+                request(ip, 42424, null, "/v1/info", null, check -> {
                     if (!check.optBoolean("ok")) return;
                     LinearLayout row = vertical(); row.setPadding(dp(8), dp(8), dp(8), dp(5));
                     row.setBackground(shape(0xff182e3e, 10, BORDER));
                     put(row, text(host + "  •  " + ip, 13, WHITE, true), 5);
                     action(row, "Prepare enrollment", false, v -> {
-                        hostIp.setText(ip); hostName.setText(host); hostPort.setText("8765");
+                        hostIp.setText(ip); hostName.setText(host); hostPort.setText("42424");
                         show("Found gateway " + host + ". Enter its computer approval code below.");
                     });
                     put(discoveredCards, row, 8);

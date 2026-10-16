@@ -18,7 +18,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
-PORT = 8765
+PORT = 42424
 APP_DIR = Path.home() / ".config" / "wif-hub"
 IDENTITY_FILE = APP_DIR / "identity.json"
 LOCK = threading.RLock()
@@ -43,8 +43,7 @@ def identity():
 
 def run(args, timeout=15, stdin=None):
     try:
-        p = subprocess.run(args, input=stdin, text=True, capture_output=True, timeout=timeout,
-                           stdin=subprocess.PIPE if stdin is not None else None)
+        p = subprocess.run(args, input=stdin, text=True, capture_output=True, timeout=timeout)
         return {"ok": p.returncode == 0, "output": (p.stdout + "\n" + p.stderr).strip()[:20000],
                 "exit": p.returncode}
     except (OSError, subprocess.TimeoutExpired) as exc:
@@ -107,11 +106,17 @@ def mdns_services():
     result = run([adb(), "mdns", "services"], 10)
     found = []
     for line in result["output"].splitlines():
-        # Typical: adb-XXXX._adb-tls-connect._tcp. 192.168.1.2:45678
-        match = re.search(r"([^\s]+\._adb-tls-(?:pairing|connect)\._tcp\.)\s+(\S+):(\d+)", line)
-        if match:
-            found.append({"service": match[1], "host": match[2], "port": int(match[3]),
-                          "kind": "pair" if "pairing" in match[1] else "connect"})
+        # adb mdns services format: <instance> <service-type> <ip:port>
+        parts = line.split()
+        if len(parts) < 3: continue
+        name, service, endpoint = parts[:3]
+        if service not in ("_adb-tls-pairing._tcp", "_adb-tls-connect._tcp"): continue
+        try:
+            host, port = endpoint.rsplit(":", 1)
+            target = validate_target(host.strip("[]"), int(port))
+            found.append({"service": name, "host": host.strip("[]"),
+                          "port": int(port), "kind": "pair" if "pairing" in service else "connect"})
+        except (ValueError, IndexError): pass
     return {"ok": result["ok"], "services": found, "raw": result["output"]}
 
 def token_ok(header):

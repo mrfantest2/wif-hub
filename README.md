@@ -5,14 +5,14 @@ Multi-host, Tailscale-powered ADB management from Android. Open-source personal/
 ## Architecture
 
 - `android/` — native Android Java controller and phone setup helper UI.
-- `gateway/gateway.py` — Python 3 standard-library gateway on Windows/Linux, bound **only to the computer's Tailscale IPv4**, port 8765.
+- `gateway/gateway.py` — Python 3 standard-library gateway on Windows/Linux, bound **only to the computer's Tailscale IPv4**, port 42424.
 - Tailscale transports traffic; **separate one-time host enrollment** protects control commands. Each Android install gets its own host-specific credential, kept in app-private preferences. No secrets go in Git.
 - The selected gateway executes ADB locally. Different gateways have distinct ADB device lists and authorizations.
 - One known gateway can return Tailscale peers to discover additional gateway instances. mDNS ADB discovery works when Android and the gateway can access the same local multicast network. Tailscale does not magically forward mDNS broadcasts.
 
 ## Computer setup (Windows or Linux)
 
-Install Python 3, ADB platform-tools, and Tailscale. Sign into the **same tailnet** and ensure tailnet ACLs permit your Android client to reach the computer on TCP/8765. On Windows, if required, allow inbound TCP/8765 on the Tailscale network interface.
+Install Python 3, ADB platform-tools, and Tailscale. Sign into the **same tailnet** and ensure tailnet ACLs permit your Android client to reach the computer on TCP/42424. On Windows, if required, allow inbound TCP/42424 on the Tailscale network interface.
 
 ```sh
 python gateway/gateway.py serve
@@ -20,7 +20,7 @@ python gateway/gateway.py serve
 
 Use `python3` instead of `python` on Linux if appropriate. Keep the service running for remote access.
 
-Gateway shows its Tailscale IP and a six-digit computer enrollment code in the terminal. On Android choose **Enroll gateway**, enter its Tailscale IP, port 8765, and the approval code. The code rotates on successful enrollment. Later run `python gateway/gateway.py show-code` to inspect it, or `rotate-code` to invalidate the previous unused code.
+Gateway shows its Tailscale IP and a six-digit computer enrollment code in the terminal. On Android choose **Enroll gateway**, enter its Tailscale IP, port 42424, and the approval code. The code rotates on successful enrollment. Later run `python gateway/gateway.py show-code` to inspect it, or `rotate-code` to invalidate the previous unused code.
 
 **Windows note**: if `tailscale` is not on PATH, add `C:\\Program Files\\Tailscale` to PATH; if `adb` is missing install Android SDK Platform Tools. Grant inbound access to this port only through the private Tailscale interface.
 
